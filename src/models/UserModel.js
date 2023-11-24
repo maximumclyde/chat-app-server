@@ -17,7 +17,9 @@ const userSchema = new mongoose.Schema(
       unique: true,
       trim: true,
       validate(value) {
-        return isEmail(value);
+        if (!isEmail(value)) {
+          throw new Error("Invalid Email");
+        }
       },
     },
     userPassword: {
@@ -25,8 +27,31 @@ const userSchema = new mongoose.Schema(
       required: true,
       trim: true,
       validate(value) {
-        return isStrongPassword(value);
+        if (!isStrongPassword(value)) {
+          throw new Error("Password is not string enough");
+        }
       },
+    },
+    friendList: {
+      type: [mongoose.Schema.ObjectId],
+    },
+    friendRequests: {
+      type: [mongoose.Schema.ObjectId],
+    },
+    requestsMade: {
+      type: [mongoose.Schema.ObjectId],
+    },
+    groupList: {
+      type: [mongoose.Schema.ObjectId],
+    },
+    userBlock: {
+      type: [mongoose.Schema.ObjectId],
+    },
+    groupBlock: {
+      type: [mongoose.Schema.ObjectId],
+    },
+    blockedBy: {
+      type: [mongoose.Schema.ObjectId],
     },
     tokens: [
       {

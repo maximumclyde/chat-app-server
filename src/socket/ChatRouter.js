@@ -4,7 +4,7 @@ const ChatRouter = express.Router();
 
 const activeUsers = {};
 
-ChatRouter.ws("/chat", (ws, req, next) => {
+ChatRouter.ws("/chat", (ws, _, next) => {
   ws.addEventListener("message", (msg) => {
     try {
       const { request, body } = JSON.parse(msg);
@@ -22,7 +22,7 @@ ChatRouter.ws("/chat", (ws, req, next) => {
         ws["userId"] = userId;
         activeUsers[userId] = ws;
       } else {
-        if (!ws?.["userId"]) {
+        if (!ws?.["userId"] || !activeUsers?.[ws?.["userId"]]) {
           ws.terminate();
           throw new Error("Not authorized to make requests");
         }
@@ -67,15 +67,19 @@ ChatRouter.ws("/chat", (ws, req, next) => {
   });
 
   ws.addEventListener("close", () => {
-    for (const id of ws?.["friendList"] || []) {
-      activeUsers?.[id]?.send(
-        JSON.stringify({
-          request: "inactive-user",
-          body: ws?.["userId"],
-        })
-      );
+    try {
+      for (const id of ws?.["friendList"] || []) {
+        activeUsers?.[id]?.send(
+          JSON.stringify({
+            request: "inactive-user",
+            body: ws?.["userId"],
+          })
+        );
+      }
+      delete activeUsers[ws?.["userId"]];
+    } catch (err) {
+      console.log("Error during connection closing: ", err);
     }
-    delete activeUsers[ws?.["userId"]];
   });
 
   next();

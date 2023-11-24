@@ -1,32 +1,37 @@
-const jwt = require("jsonwebtoken");
+const { jwt } = require("jsonwebtoken");
 const { User } = require("../models");
 
 async function checkAuth(req, res, next) {
-  let token = (req.get("Bearer") || "").replace(" ", "");
-  if (!token) {
-    throw new Error("Token Missing");
-  }
-
   try {
-    let { _id, exp } = jwt.verify(token, process.env.JWT_SECRET);
-    let user = await User.findById(_id);
-    if (!user) {
-      throw new Error("User is not found");
+    const token = req.get("Bearer")?.replace("Bearer ", "");
+    if (!token) {
+      throw new Error({
+        message: "Token is missing!",
+      });
     }
 
-    if (Date.now() > exp) {
-      user.tokens = (user.tokens || [])?.filter((t) => {
-        t.token !== token;
+    let { _id, exp } = jwt.verify(token, process.env.JWT_SECRET);
+    let user = await User.findOne({ _id, "tokens.token": token });
+
+    if (!user) {
+      throw new Error({
+        message: "User was not found",
       });
-      user.save();
-      throw new Error("Token expired");
+    }
+
+    if (Date.now() / 1000 > Number(exp)) {
+      user.tokens = user.tokens.filter(({ token: t }) => t !== token);
+      await user.save();
+      throw new Error({
+        message: "Token has expired!",
+      });
     }
 
     req.user = user;
     req.token = token;
     next();
   } catch (err) {
-    res.status(500).send(err);
+    res.status(401).send(err);
   }
 }
 
