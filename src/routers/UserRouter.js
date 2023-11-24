@@ -18,6 +18,11 @@ router.post("/users", async (req, res) => {
   }
 });
 
+router.get("/users/profile", checkAuth, async (req, res) => {
+  const { user } = req;
+  res.status(200).send(user);
+});
+
 router.post("/users/login", async (req, res) => {
   try {
     const { email, password } = req?.body;
