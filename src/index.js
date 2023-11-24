@@ -2,10 +2,12 @@ require("dotenv").config();
 
 const express = require("express");
 const mongoose = require("mongoose");
-const { createSocketInstance, ChatRouter } = require("./socket");
 
 const app = express();
-createSocketInstance(app);
+const expressWs = require("express-ws")(app);
+
+const { createSocketInstance, ChatRouter } = require("./socket");
+createSocketInstance(expressWs);
 
 const bodyParser = require("body-parser");
 const cors = require("cors");
@@ -22,7 +24,7 @@ mongoose.connect(process.env.DB_URL, {
   dbName: "chat-app",
 });
 
-for (const router of Routers) {
+for (const router in Routers) {
   app.use(Routers[router]);
 }
 

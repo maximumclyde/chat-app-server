@@ -1,5 +1,9 @@
 const ChatRouter = require("./ChatRouter");
-const { createSocketInstance, getSocketInstance } = require("./SocketInstance");
+const {
+  createSocketInstance,
+  getSocketInstance,
+  findWsUser,
+} = require("./SocketInstance");
 
 module.exports = {
   ChatRouter,

@@ -1,8 +1,7 @@
-const expressWsInitiator = require("express-ws");
-const expressWs = null;
+let expressWs = null;
 
-function createSocketInstance(app) {
-  expressWs = expressWsInitiator(app);
+function createSocketInstance(instance) {
+  expressWs = instance;
 }
 
 function getSocketInstance() {
