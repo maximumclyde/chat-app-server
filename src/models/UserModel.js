@@ -34,24 +34,31 @@ const userSchema = new mongoose.Schema(
     },
     friendList: {
       type: [mongoose.Schema.ObjectId],
+      default: [],
     },
     friendRequests: {
       type: [mongoose.Schema.ObjectId],
+      default: [],
     },
     requestsMade: {
       type: [mongoose.Schema.ObjectId],
+      default: [],
     },
     groupList: {
       type: [mongoose.Schema.ObjectId],
+      default: [],
     },
     userBlock: {
       type: [mongoose.Schema.ObjectId],
+      default: [],
     },
     groupBlock: {
       type: [mongoose.Schema.ObjectId],
+      default: [],
     },
     blockedBy: {
       type: [mongoose.Schema.ObjectId],
+      default: [],
     },
     tokens: [
       {
