@@ -1,9 +1,9 @@
-const { jwt } = require("jsonwebtoken");
+const jwt = require("jsonwebtoken");
 const { User } = require("../models");
 
 async function checkAuth(req, res, next) {
   try {
-    const token = req.get("Bearer")?.replace("Bearer ", "");
+    const token = req.get("Authorization")?.replace("Bearer ", "");
     if (!token) {
       throw new Error({
         message: "Token is missing!",

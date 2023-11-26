@@ -77,8 +77,6 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-const User = mongoose.model("User", userSchema);
-
 userSchema.methods.toJSON = function () {
   let user = this;
   const userObject = user.toObject();
@@ -116,7 +114,10 @@ userSchema.pre("save", async function (next) {
   next();
 });
 
-userSchema.static("findByCredentials", async (userEmail, userPassword) => {
+userSchema.statics.findByCredentials = async function (
+  userEmail,
+  userPassword
+) {
   let user = await User.findOne({ userEmail });
   if (!user) {
     throw new Error("Unable to log in. Check your credentials.");
@@ -128,6 +129,8 @@ userSchema.static("findByCredentials", async (userEmail, userPassword) => {
   }
 
   return user;
-});
+};
+
+const User = mongoose.model("User", userSchema);
 
 module.exports = User;

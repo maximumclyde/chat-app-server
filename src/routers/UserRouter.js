@@ -60,9 +60,14 @@ router.post("/users/logoutAll", checkAuth, async (req, res) => {
   }
 });
 
-router.patch("/users", checkAuth, async (req, res) => {
+router.patch("/users/profile", checkAuth, async (req, res) => {
   try {
-    let user = { ...req.user, ...req.body };
+    let { user } = req;
+    for (const key in req.body) {
+      if (user.hasOwnProperty(key)) {
+        user[key] = req.body[key];
+      }
+    }
     user = await user.save();
     return res.status(200).send(user);
   } catch (err) {
@@ -93,32 +98,36 @@ router.post("/users/request/:id", checkAuth, async (req, res) => {
     }
 
     if (
-      userToRequest.blockUser.includes(user._id) ||
-      userToRequest.blockedBy.includes(user._id)
+      userToRequest.userBlock.find(
+        (id) => id.toString() === user._id.toString()
+      ) ||
+      userToRequest.blockedBy.find(
+        (id) => id.toString() === user._id.toString()
+      )
     ) {
       throw new Error("Can not send requests to a user that blocked you");
     }
 
-    if (user.requestsMade.includes(userId)) {
+    if (user.requestsMade.find((id) => id.toString() === userId)) {
       throw new Error("Can not request multiple time to the same user");
     }
 
-    if (user.friendRequests.includes(userId)) {
+    if (user.friendRequests.find((id) => id.toString() === userId)) {
       throw new Error(
         "Can not make a request to a user that has already made a request to you"
       );
     }
 
-    if (user.friendList.includes(userId)) {
+    if (user.friendList.find((id) => id.toString() === userId)) {
       throw new Error("Can not make a request to a friend");
     }
 
-    user.requestsMade = [...user.requestsMade, userId];
+    user.requestsMade = [...user.requestsMade, userToRequest._id];
     userToRequest.friendRequests = [...userToRequest.friendRequests, user._id];
 
     const [userRes] = await Promise.all([
-      user.save(),
-      userToRequest.save(),
+      await user.save(),
+      await userToRequest.save(),
     ]).then((res) => {
       let wsClient = findWsUser(userId);
       if (wsClient) {
@@ -150,33 +159,38 @@ router.post("/users/accept/:id", checkAuth, async (req, res) => {
 
     if (!requestUser) {
       user.friendRequests = user.friendRequests.filter(
-        (id) => id !== requestUserId
+        (id) => id.toString() !== requestUserId
       );
       user.save();
       throw new Error("Request user was not found");
     }
 
     if (
-      user.userBlock.includes(requestUserId) ||
-      user.blockedBy.includes(requestUserId)
+      user.userBlock.find((id) => id.toString() === requestUserId) ||
+      user.blockedBy.find((id) => id.toString() === requestUserId)
     ) {
       throw new Error("No operations allowed with blocked users");
     }
 
-    if (!requestUser.requestsMade.includes(user._id)) {
+    if (
+      !requestUser.requestsMade.find(
+        (id) => id.toString() === user._id.toString()
+      )
+    ) {
       throw new Error("Request was not found");
     }
 
-    if (!user.friendRequests.includes(requestUserId)) {
+    if (!user.friendRequests.find((id) => id.toString() === requestUserId)) {
       throw new Error("Request was not found");
     }
 
     requestUser.requestsMade = requestUser.requestsMade.filter(
-      (id) => id !== user._id
+      (id) => id.toString() !== user._id.toString()
     );
     requestUser.friendList = [...requestUser.friendList, user._id];
-    user.requestsMade = user.friendRequests.filter(
-      (id) => id !== requestUserId
+
+    user.friendRequests = user.friendRequests.filter(
+      (id) => id.toString() !== requestUser._id.toString()
     );
     user.friendList = [...user.friendList, requestUserId];
     const [userRes] = await Promise.all([user.save(), requestUser.save()]).then(
@@ -211,26 +225,29 @@ router.post("/users/decline/:id", checkAuth, async (req, res) => {
     let requestUser = await User.findById(requestUserId);
 
     user.friendRequests = user.friendRequests.filter(
-      (id) => id !== requestUserId
+      (id) => id.toString() !== requestUserId
     );
 
-    if (!requestUser) {
+    if (
+      !requestUser ||
+      !user.friendRequests.find((id) => id.toString() === requestUserId)
+    ) {
       user.save();
       throw new Error("Request user was not found");
     }
 
     if (
-      user.userBlock.includes(requestUserId) ||
-      user.blockedBy.includes(requestUserId)
+      user.userBlock.find((id) => id.toString() === requestUserId) ||
+      user.blockedBy.find((id) => id.toString() === requestUserId)
     ) {
       throw new Error("No operations allowed with blocked users");
     }
 
     user.friendRequests = user.friendRequests.filter(
-      (id) => id !== requestUserId
+      (id) => id.toString() !== requestUserId
     );
     requestUser.requestsMade = requestUser.requestsMade.filter(
-      (id) => id !== user._id
+      (id) => id.toString() !== user._id.toString()
     );
 
     const [userRes] = await Promise.all([user.save(), requestUser.save()]).then(
@@ -262,25 +279,32 @@ router.post("/users/unfriend/:id", checkAuth, async (req, res) => {
     const { user } = req;
     const relatedUserId = req.params.id;
     let relatedUser = await User.findById(relatedUserId);
+
     if (!relatedUser) {
-      user.friendList = user.friendList.filter((id) => id !== relatedUserId);
+      user.friendList = user.friendList.filter(
+        (id) => id.toString() !== relatedUserId
+      );
       user.save();
       throw new Error("Friend was not found");
     }
 
     if (
-      user.userBlock.includes(relatedUserId) ||
-      user.blockedBy.includes(relatedUserId)
+      user.userBlock.find((id) => id.toString() === relatedUserId) ||
+      user.blockedBy.find((id) => id.toString() === relatedUserId)
     ) {
       throw new Error("No operations allowed with blocked users");
     }
 
-    if (!user.friendList.includes(relatedUserId)) {
+    if (!user.friendList.find((id) => id.toString() === relatedUserId)) {
       throw new Error("Can not unfriend a user who is not your friend");
     }
 
-    user.friendList = user.friendList.filter((id) => id !== relatedUserId);
-    relatedUser.friendList = relatedUser.filter((id) => id !== user._id);
+    user.friendList = user.friendList.filter(
+      (id) => id.toString() !== relatedUserId
+    );
+    relatedUser.friendList = relatedUser.friendList.filter(
+      (id) => id.toString() !== user._id.toString()
+    );
 
     const [userRes] = await Promise.all([user.save(), relatedUser.save()]).then(
       (res) => {
@@ -313,27 +337,35 @@ router.post("/users/block/:id", checkAuth, async (req, res) => {
     const blockId = req.params.id;
     let blockUser = await User.findById(blockId);
 
-    user.friendList = user.friendList.filter((id) => id !== blockId);
-    user.friendRequests = user.friendRequests.filter((id) => id !== blockId);
-    user.requestsMade = user.requestsMade.filter((id) => id !== blockId);
-    user.userBlock = [...user.userBlock, blockId];
-
     if (!blockUser) {
-      user.save();
       throw new Error("Block user was not found");
     }
 
-    if (user.userBlock.includes(blockId) || user.blockedBy.includes(blockId)) {
+    if (
+      user.userBlock.find((id) => id.toString() === blockId) ||
+      user.blockedBy.find((id) => id.toString() === blockId)
+    ) {
       throw new Error("No operations allowed with blocked users");
     }
 
-    blockUser.friendList = blockUser.friendList.filter((id) => id !== blockId);
+    blockUser.friendList = blockUser.friendList.filter(
+      (id) => id.toString() !== blockId
+    );
     blockUser.friendRequests = blockUser.friendRequests.filter(
-      (id) => id !== blockId
+      (id) => id.toString() !== blockId
     );
     blockUser.requestsMade = blockUser.requestsMade.filter(
-      (id) => id !== blockId
+      (id) => id.toString() !== blockId
     );
+
+    user.friendList = user.friendList.filter((id) => id.toString() !== blockId);
+    user.friendRequests = user.friendRequests.filter(
+      (id) => id.toString() !== blockId
+    );
+    user.requestsMade = user.requestsMade.filter(
+      (id) => id.toString() !== blockId
+    );
+    user.userBlock = [...user.userBlock, blockId];
     blockUser.blockedBy = [...blockUser.blockedBy, user._id];
 
     const [userRes] = await Promise.all([user.save(), blockUser.save()]).then(
@@ -367,14 +399,14 @@ router.post("/users/unblock/:id", checkAuth, async (req, res) => {
     const blockId = req.params.id;
     let blockUser = await User.findById(blockId);
 
-    user.userBlock = user.userBlock.filter((id) => id !== blockId);
-
-    if (!blockUser) {
-      user.save();
+    if (!blockUser || !user.userBlock.find((id) => id.toString() === blockId)) {
       throw new Error("Blocked suer was not found");
     }
 
-    blockUser.blockedBy = blockUser.blockedBy.filter((id) => id !== user._id);
+    user.userBlock = user.userBlock.filter((id) => id.toString() !== blockId);
+    blockUser.blockedBy = blockUser.blockedBy.filter(
+      (id) => id.toString() !== user._id.toString()
+    );
     const [userRes] = await Promise.all([user.save(), blockUser.save()]).then(
       (res) => {
         let wsClient = findWsUser(blockId);

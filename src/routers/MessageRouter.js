@@ -1,6 +1,6 @@
 const express = require("express");
 const { checkAuth } = require("../middleware");
-const { Message, Group } = require("../models");
+const { Message, Group, User } = require("../models");
 const { findWsUser } = require("../socket");
 
 const MessageRouter = express.Router();
@@ -10,12 +10,12 @@ MessageRouter.get("/message/:userId", checkAuth, async (req, res) => {
     let { user } = req.body;
     let friendId = req.params.userId;
 
-    if (!user.friendList.includes(friendId)) {
+    if (!user.friendList.find((id) => id.toString() === friendId)) {
       throw new Error("Cannot get messages between users that are not friends");
     }
 
     let messages = await Message.find({
-      $where: `(this.senderId === ${user._id} && this.receiverId === ${friendId}) || (this.senderId === ${friendId} && this.receiverId === ${user._id})`,
+      $where: `(this.senderId.toString() === ${user._id} && this.receiverId.toString() === ${friendId}) || (this.senderId.toString() === ${friendId} && this.receiverId.toString() === ${user._id})`,
     });
     res.status(200).send(messages);
   } catch (err) {
@@ -27,8 +27,13 @@ MessageRouter.get("/message/group/:id", checkAuth, async (req, res) => {
   try {
     let { user } = req;
     let groupId = req.params.id;
-    if (!user.groupList) {
+    if (!user.groupList.find((id) => id.toString() === groupId)) {
       throw new Error("Cannot get messages to a group you are not part of");
+    }
+
+    let group = await Group.findById(groupId);
+    if (!group) {
+      throw new Error("Group was not found");
     }
 
     let messages = await Message.find({ groupId });
@@ -44,16 +49,21 @@ MessageRouter.post("/message/:userId", checkAuth, async (req, res) => {
     let friendId = req.params.userId;
     let { content } = req.body;
 
-    if (!user.friendList.includes(friendId)) {
+    if (!user.friendList.find((id) => id.toString() === friendId)) {
       throw new Error(
         "Can not send a message to a user that's not your friend"
       );
     }
 
+    let friend = await User.findById(friendId);
+    if (!friend) {
+      throw new Error("Friend could not be found");
+    }
+
     let message = new Message({
       content,
       senderId: user._id,
-      receiverId: friendId,
+      receiverId: friend._id,
     });
 
     message = await message.save();
@@ -84,7 +94,7 @@ MessageRouter.post("/message/group/:groupId", checkAuth, async (req, res) => {
     const { content } = req.body;
     let groupId = req.params.groupId;
 
-    if (!user.groupList.includes(groupId)) {
+    if (!user.groupList.find((id) => id.toString() === groupId)) {
       throw new Error("Cannot send messages to a group you are not a part to");
     }
 
@@ -96,7 +106,7 @@ MessageRouter.post("/message/group/:groupId", checkAuth, async (req, res) => {
     let message = new Message({
       content,
       senderId: user._id,
-      groupId,
+      groupId: group._id,
     });
 
     message = await message.save();
