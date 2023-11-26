@@ -5,6 +5,25 @@ const { findWsUser } = require("../socket");
 
 const GroupRouter = express.Router();
 
+GroupRouter.get("/groups/:groupId", checkAuth, async (req, res) => {
+  try {
+    let { user } = req;
+    let groupId = req.params.groupId;
+    if (!user.groupList.find((id) => id.toString() === groupId)) {
+      throw new Error("Cannot get info on a group you are not a part of");
+    }
+
+    let group = await Group.findById(groupId);
+    if (!group) {
+      throw new Error("Could not find group");
+    }
+
+    res.status(200).send(group);
+  } catch (err) {
+    res.status(500).send(err);
+  }
+});
+
 GroupRouter.post("/groups", checkAuth, async (req, res) => {
   try {
     let { user } = req;
@@ -35,42 +54,45 @@ GroupRouter.delete("/groups/:id", checkAuth, async (req, res) => {
       throw new Error("Could not find group");
     }
 
-    if (!group.groupAdmins.find((id) => id.toString() === user._id)) {
+    if (
+      !group.groupAdmins.find((id) => id.toString() === user._id.toString())
+    ) {
       throw new Error("Cannot operate if user is not admin");
     }
 
     await Promise.all([
-      User.findMany({
-        groupList: { $elemMatch: groupId },
+      User.find({
+        groupList: { $elemMatch: { $eq: groupId } },
       }),
       Message.deleteMany({ groupId }),
-      Group.deleteOne(group._id),
-    ]).then(async (res) => {
-      let members = res?.[0];
+      Group.deleteOne({ _id: groupId }),
+    ]).then(async (result) => {
+      let members = result?.[0];
       if (Array.isArray(members)) {
         for (let i = 0; i < members.length; i++) {
-          let groupList = members[i]["groupList"].filter(
+          members[i]["groupList"] = members[i]["groupList"].filter(
             (id) => id.toString() !== groupId
           );
-          members[i]["groupList"] = groupList;
         }
         await Promise.allSettled(
           members.map(async (member) => await member.save())
         ).then((membersRes) => {
-          for (const member of membersRes) {
-            let memberId = member._id.toString();
-            let wsClient = findWsUser(memberId);
-            if (wsClient) {
-              wsClient.send(
-                JSON.stringify({
-                  request: "group-delete",
-                  body: {
-                    groupId,
-                    userName: user.userName,
-                    id: user._id,
-                  },
-                })
-              );
+          for (const memRes of membersRes) {
+            if (memRes.status === "fulfilled") {
+              let memberId = memRes.value._id.toString();
+              let wsClient = findWsUser(memberId);
+              if (wsClient) {
+                wsClient.send(
+                  JSON.stringify({
+                    request: "group-delete",
+                    body: {
+                      groupId,
+                      userName: user.userName,
+                      id: user._id,
+                    },
+                  })
+                );
+              }
             }
           }
 
@@ -99,15 +121,17 @@ GroupRouter.post(
       }
 
       if (
-        !group.groupAdmins.includes(
-          (id) => id.toString() === user._id.toString()
-        )
+        !group.groupAdmins.find((id) => id.toString() === user._id.toString())
       ) {
         throw new Error("Cannot operate if user is not admin");
       }
 
-      if (group.groupMembers.includes((id) => id.toString() === userId)) {
+      if (group.groupMembers.find((id) => id.toString() === userId)) {
         throw new Error("Cannot add the same member twice");
+      }
+
+      if (!user.friendList.find((id) => id.toString() === userId)) {
+        throw new Error("Cannot add a user that's not in your friend list");
       }
 
       let requestUser = await User.findById(userId);
@@ -115,7 +139,7 @@ GroupRouter.post(
         throw new Error("Could not find user");
       }
 
-      if (requestUser.groupBlock.includes((id) => id.toString() === groupId)) {
+      if (requestUser.groupBlock.find((id) => id.toString() === groupId)) {
         throw new Error("User has blocked the group");
       }
 
@@ -164,17 +188,24 @@ GroupRouter.post(
         throw new Error("Could not find group");
       }
 
-      if (!group.groupAdmins.includes((id) => id.toString() === user._id)) {
-        throw new Error("Can not operate if user is not admin");
+      let requestUser = undefined;
+      if (user._id.toString() === userId) {
+        requestUser = user;
+      } else {
+        if (
+          !group.groupAdmins.find((id) => id.toString() === user._id.toString())
+        ) {
+          throw new Error("Can not operate if user is not admin");
+        }
+
+        requestUser = await User.findById(userId);
+        if (!requestUser) {
+          throw new Error("Could not find user");
+        }
       }
 
-      if (!group.groupMembers.includes((id) => id.toString() === userId)) {
+      if (!group.groupMembers.find((id) => id.toString() === userId)) {
         throw new Error("Can not remove user that is not part of the group");
-      }
-
-      let requestUser = await User.findById(userId);
-      if (!requestUser) {
-        throw new Error("Could not find user");
       }
 
       group.groupMembers = group.groupMembers.filter(
@@ -190,7 +221,7 @@ GroupRouter.post(
       if (!group.groupMembers.length) {
         await Promise.all([
           Message.deleteMany({ groupId }),
-          Group.deleteOne(groupId),
+          Group.deleteOne({ _id: groupId }),
         ]).then(() => {
           res.status(200).send();
         });
@@ -241,18 +272,16 @@ GroupRouter.post(
       }
 
       if (
-        !group.groupAdmins.includes(
-          (id) => id.toString() === user._id.toString()
-        )
+        !group.groupAdmins.find((id) => id.toString() === user._id.toString())
       ) {
         throw new Error("Cannot operate if user is not admin");
       }
 
-      if (!group.groupMembers.includes((id) => id.toString() === userId)) {
+      if (!group.groupMembers.find((id) => id.toString() === userId)) {
         throw new Error("Cannot admin a user that is not part of the group");
       }
 
-      if (group.groupAdmins.includes((id) => id.toString() === userId)) {
+      if (group.groupAdmins.find((id) => id.toString() === userId)) {
         throw new Error("Cannot admin an admin");
       }
 
@@ -282,14 +311,12 @@ GroupRouter.post(
       }
 
       if (
-        !group.groupAdmins.includes(
-          (id) => id.toString() === user._id.toString()
-        )
+        !group.groupAdmins.find((id) => id.toString() === user._id.toString())
       ) {
         throw new Error("Cannot operate if user is not admin");
       }
 
-      if (!group.groupAdmins.includes((id) => id.toString() === userId)) {
+      if (!group.groupAdmins.find((id) => id.toString() === userId)) {
         throw new Error("Cannot remove a user that is not part of the admins");
       }
 

@@ -3,11 +3,14 @@ const jwt = require("jsonwebtoken");
 const { User, Group, Message } = require("../../models");
 
 const userOneId = new mongoose.Types.ObjectId();
+const groupId = new mongoose.Types.ObjectId();
+
 const userOne = {
   _id: userOneId,
   userName: "Clyde 1",
   userEmail: "email@email.com",
   userPassword: "Password123!",
+  groupList: [groupId],
   tokens: [
     {
       token: jwt.sign({ _id: userOneId }, process.env.JWT_SECRET, {
@@ -16,7 +19,7 @@ const userOne = {
     },
     {
       token: jwt.sign({ _id: userOneId }, process.env.JWT_SECRET, {
-        expiresIn: "40 days",
+        expiresIn: "41 days",
       }),
     },
   ],
@@ -28,6 +31,7 @@ const userTwo = {
   userName: "Clyde 2",
   userEmail: "email2@email.com",
   userPassword: "Password123!",
+  groupList: [],
   tokens: [
     {
       token: jwt.sign({ _id: userTwoId }, process.env.JWT_SECRET, {
@@ -35,6 +39,17 @@ const userTwo = {
       }),
     },
   ],
+};
+
+const testGroup = {
+  _id: groupId,
+  groupName: "Test Group",
+  groupMembers: [userOneId],
+  groupAdmins: [userOneId],
+  createdBy: {
+    name: userOne.userName,
+    id: userOneId,
+  },
 };
 
 async function setupDb() {
@@ -47,6 +62,7 @@ async function setupDb() {
   return await Promise.all([
     await new User(userOne).save(),
     await new User(userTwo).save(),
+    await new Group(testGroup).save(),
   ]);
 }
 
@@ -56,4 +72,6 @@ module.exports = {
   userOne,
   userTwo,
   setupDb,
+  testGroup,
+  groupId,
 };

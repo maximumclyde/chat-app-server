@@ -86,3 +86,10 @@ test("Should logout user", async () => {
     .set("Authorization", `Bearer ${userOne.tokens[1].token}`)
     .expect(200);
 });
+
+test("User 1 should be able to delete their profile", async () => {
+  await request(app)
+    .delete("/users/profile")
+    .set("Authorization", `Bearer ${userOne.tokens[0].token}`)
+    .expect(200);
+});

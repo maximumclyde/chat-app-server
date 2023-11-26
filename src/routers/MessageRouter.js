@@ -7,7 +7,7 @@ const MessageRouter = express.Router();
 
 MessageRouter.get("/message/:userId", checkAuth, async (req, res) => {
   try {
-    let { user } = req.body;
+    let { user } = req;
     let friendId = req.params.userId;
 
     if (!user.friendList.find((id) => id.toString() === friendId)) {
@@ -15,7 +15,12 @@ MessageRouter.get("/message/:userId", checkAuth, async (req, res) => {
     }
 
     let messages = await Message.find({
-      $where: `(this.senderId.toString() === ${user._id} && this.receiverId.toString() === ${friendId}) || (this.senderId.toString() === ${friendId} && this.receiverId.toString() === ${user._id})`,
+      $and: [
+        { $or: [{ senderId: user._id.toString() }, { senderId: friendId }] },
+        {
+          $or: [{ receiverId: user._id.toString() }, { receiverId: friendId }],
+        },
+      ],
     });
     res.status(200).send(messages);
   } catch (err) {
@@ -45,7 +50,7 @@ MessageRouter.get("/message/group/:id", checkAuth, async (req, res) => {
 
 MessageRouter.post("/message/:userId", checkAuth, async (req, res) => {
   try {
-    let { user } = req.body;
+    let { user } = req;
     let friendId = req.params.userId;
     let { content } = req.body;
 
@@ -62,6 +67,7 @@ MessageRouter.post("/message/:userId", checkAuth, async (req, res) => {
 
     let message = new Message({
       content,
+      senderName: user.userName,
       senderId: user._id,
       receiverId: friend._id,
     });
@@ -105,6 +111,7 @@ MessageRouter.post("/message/group/:groupId", checkAuth, async (req, res) => {
 
     let message = new Message({
       content,
+      senderName: user.userName,
       senderId: user._id,
       groupId: group._id,
     });

@@ -5,6 +5,8 @@ const { findWsUser } = require("../socket");
 
 const router = Router();
 
+const allowedChangeKeys = ["userName", "userEmail", "userPassword"];
+
 router.post("/users", async (req, res) => {
   try {
     let user = await new User(req.body).save();
@@ -64,7 +66,7 @@ router.patch("/users/profile", checkAuth, async (req, res) => {
   try {
     let { user } = req;
     for (const key in req.body) {
-      if (user.hasOwnProperty(key)) {
+      if (allowedChangeKeys.includes(key)) {
         user[key] = req.body[key];
       }
     }
@@ -76,12 +78,12 @@ router.patch("/users/profile", checkAuth, async (req, res) => {
 });
 
 router.delete("/users/profile", checkAuth, async (req, res) => {
-  try {
-    await User.deleteOne({ _id: req.user._id });
-    return res.status(200).send();
-  } catch (err) {
-    return res.status(500).send(err);
-  }
+  // try {
+  await User.deleteOne({ _id: req.user._id });
+  return res.status(200).send();
+  // } catch (err) {
+  //   return res.status(500).send(err);
+  // }
 });
 
 router.post("/users/request/:id", checkAuth, async (req, res) => {

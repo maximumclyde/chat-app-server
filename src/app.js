@@ -15,7 +15,7 @@ const cors = require("cors");
 const Routers = require("./routers");
 
 app.use(express.json());
-app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cors());
 
 app.use(ChatRouter);
