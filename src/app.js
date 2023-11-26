@@ -20,8 +20,15 @@ app.use(cors());
 
 app.use(ChatRouter);
 
+let suffix = "dev";
+if (process.env.NODE_ENV === "production") {
+  suffix = "prod";
+} else if (process.env.NODE_ENV === "test") {
+  suffix = "test";
+}
+
 mongoose.connect(process.env.DB_URL, {
-  dbName: "chat-app",
+  dbName: `chat-app-${suffix}`,
 });
 
 for (const router in Routers) {
