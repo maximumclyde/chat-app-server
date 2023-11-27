@@ -77,13 +77,40 @@ router.patch("/users/profile", checkAuth, async (req, res) => {
   }
 });
 
+router.get("/users/:userId", checkAuth, async (req, res) => {
+  try {
+    let { user } = req;
+    let userId = req.params.userId;
+    if (user.blockedBy.find((id) => id.toString() === userId)) {
+      throw new Error("Cannot get a user that blocked you");
+    }
+
+    let requestUser = await User.findById(userId);
+    if (!requestUser) {
+      throw new Error("Could not find user");
+    }
+
+    delete requestUser["userEmail"];
+    delete requestUser["friendRequests"];
+    delete requestUser["requestsMade"];
+    delete requestUser["groupList"];
+    delete requestUser["userBlock"];
+    delete requestUser["blockedBy"];
+    delete requestUser["groupBlock"];
+
+    res.status(200).send(requestUser);
+  } catch (err) {
+    res.status(500).send(err);
+  }
+});
+
 router.delete("/users/profile", checkAuth, async (req, res) => {
-  // try {
-  await User.deleteOne({ _id: req.user._id });
-  return res.status(200).send();
-  // } catch (err) {
-  //   return res.status(500).send(err);
-  // }
+  try {
+    await User.deleteOne({ _id: req.user._id });
+    return res.status(200).send();
+  } catch (err) {
+    return res.status(500).send(err);
+  }
 });
 
 router.post("/users/request/:id", checkAuth, async (req, res) => {

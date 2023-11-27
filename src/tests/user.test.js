@@ -32,7 +32,16 @@ describe("User test suite", () => {
     await request(app)
       .patch("/users/profile")
       .set("Authorization", `Bearer ${userOne.tokens[0].token}`)
+      .set("Content-Type", "application/json")
+      .set("Accept", "application/json")
       .send({ userName: "Updated Name" })
+      .expect(200);
+  });
+
+  test("User 1 should get user 2 profile", async () => {
+    await request(app)
+      .get(`/users/${userTwoId}`)
+      .set("Authorization", `Bearer ${userOne.tokens[0].token}`)
       .expect(200);
   });
 
