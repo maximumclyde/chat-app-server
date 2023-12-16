@@ -1,6 +1,6 @@
 const { Router } = require("express");
 const { checkAuth } = require("../middleware");
-const { User } = require("../models");
+const { User, Preference } = require("../models");
 const { findWsUser } = require("../socket");
 
 const router = Router();
@@ -10,10 +10,20 @@ const allowedChangeKeys = ["userName", "userEmail", "userPassword"];
 router.post("/users", async (req, res) => {
   try {
     let user = await new User(req.body).save();
-    let token = await user.generateToken();
+    const [token, userPreferences] = await Promise.all([
+      await user.generateToken(),
+      await new Preference({
+        userId: user._id,
+        preferences: {
+          theme: "dark",
+        },
+      }).save(),
+    ]);
+
     return res.status(200).send({
       user,
       token,
+      userPreferences,
     });
   } catch (err) {
     return res.status(500).send(err);
@@ -22,7 +32,13 @@ router.post("/users", async (req, res) => {
 
 router.get("/users/profile", checkAuth, async (req, res) => {
   const { user } = req;
-  res.status(200).send(user);
+
+  try {
+    const userPreferences = await Preference.findOne({ userId: user._id });
+    res.status(200).send({ user, userPreferences });
+  } catch (err) {
+    res.status(500).send(err);
+  }
 });
 
 router.post("/users/login", async (req, res) => {
@@ -33,8 +49,12 @@ router.post("/users/login", async (req, res) => {
       throw new Error("User was not found");
     }
 
-    const token = await user.generateToken();
-    res.status(200).send({ user, token });
+    const [token, userPreferences] = await Promise.all([
+      await user.generateToken(),
+      await Preference.findOne({ userId: user._id }),
+    ]);
+
+    res.status(200).send({ user, token, userPreferences });
   } catch (err) {
     res.status(500).send(err);
   }
@@ -106,7 +126,10 @@ router.get("/users/:userId", checkAuth, async (req, res) => {
 
 router.delete("/users/profile", checkAuth, async (req, res) => {
   try {
-    await User.deleteOne({ _id: req.user._id });
+    await Promise.all([
+      await User.deleteOne({ _id: req.user._id }),
+      await Preference.deleteOne({ userId: req.user._id }),
+    ]);
     return res.status(200).send();
   } catch (err) {
     return res.status(500).send(err);

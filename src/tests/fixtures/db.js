@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
-const { User, Group, Message } = require("../../models");
+const { User, Group, Message, Preference } = require("../../models");
 
 const userOneId = new mongoose.Types.ObjectId();
 const groupId = new mongoose.Types.ObjectId();
@@ -52,17 +52,28 @@ const testGroup = {
   },
 };
 
+const preferenceOneId = new mongoose.Types.ObjectId();
+const userOnePreferences = {
+  _id: preferenceOneId,
+  userId: userOneId,
+  preferences: {
+    theme: "dark",
+  },
+};
+
 async function setupDb() {
   await Promise.all([
     User.deleteMany(),
     Message.deleteMany(),
     Group.deleteMany(),
+    Preference.deleteMany(),
   ]);
 
   return await Promise.all([
     await new User(userOne).save(),
     await new User(userTwo).save(),
     await new Group(testGroup).save(),
+    await new Preference(userOnePreferences).save(),
   ]);
 }
 
@@ -74,4 +85,6 @@ module.exports = {
   setupDb,
   testGroup,
   groupId,
+  userOnePreferences,
+  preferenceOneId,
 };
