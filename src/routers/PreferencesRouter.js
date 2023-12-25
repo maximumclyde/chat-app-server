@@ -4,13 +4,14 @@ const { Preference } = require("../models");
 
 const router = Router();
 
-router.patch("/userPreferences", checkAuth, async (req, res) => {
+router.post("/userPreferences", checkAuth, async (req, res) => {
   const { user, body } = req;
   try {
     let userPreferences = await Preference.findOne({ userId: user._id });
     for (const key in body) {
       userPreferences["preferences"][key] = body[key];
     }
+    userPreferences.markModified("preferences");
     await userPreferences.save();
     res.status(200).send(userPreferences);
   } catch (err) {
@@ -18,7 +19,7 @@ router.patch("/userPreferences", checkAuth, async (req, res) => {
   }
 });
 
-router.patch(
+router.post(
   "/userPreferences/removePreference",
   checkAuth,
   async (req, res) => {
@@ -28,6 +29,7 @@ router.patch(
       for (const key of body) {
         delete userPreferences["preferences"][key];
       }
+      userPreferences.markModified("preferences");
       await userPreferences.save();
       res.status(200).send(userPreferences);
     } catch (err) {

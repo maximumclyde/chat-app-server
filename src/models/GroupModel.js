@@ -32,6 +32,22 @@ const groupSchema = new mongoose.Schema(
   }
 );
 
+groupSchema.post("updateMany", async function (next) {
+  try {
+    let group = this;
+    if (group.groupMembers.length) {
+      if (!group.groupAdmins.length) {
+        group.groupAdmins = [group.groupMembers[0]];
+        await group.save();
+      }
+    } else {
+      await Group.deleteOne({ _id: group._id });
+    }
+  } catch {}
+
+  next();
+});
+
 const Group = mongoose.model("Group", groupSchema);
 
 module.exports = Group;

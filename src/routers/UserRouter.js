@@ -1,11 +1,12 @@
 const { Router } = require("express");
 const { checkAuth } = require("../middleware");
-const { User, Preference } = require("../models");
+const { User, Preference, Group, Message } = require("../models");
 const { findWsUser } = require("../socket");
 
 const router = Router();
 
 const allowedChangeKeys = ["userName", "userEmail", "userPassword"];
+const ALLOWED_QUERY = /[A-Za-z0-9\s]/;
 
 router.post("/users", async (req, res) => {
   try {
@@ -34,8 +35,23 @@ router.get("/users/profile", checkAuth, async (req, res) => {
   const { user } = req;
 
   try {
-    const userPreferences = await Preference.findOne({ userId: user._id });
-    res.status(200).send({ user, userPreferences });
+    const [userPreferences, friends, userGroups] = await Promise.all([
+      Preference.findOne({ userId: user._id }),
+      User.find(
+        {
+          friendList: {
+            $elemMatch: { $eq: user._id },
+          },
+        },
+        "userName userEmail friendList _id"
+      ),
+      Group.find({
+        groupMembers: {
+          $elemMatch: { $eq: user._id },
+        },
+      }),
+    ]);
+    res.status(200).send({ user, userPreferences, friends, userGroups });
   } catch (err) {
     res.status(500).send(err);
   }
@@ -127,8 +143,86 @@ router.get("/users/:userId", checkAuth, async (req, res) => {
 router.delete("/users/profile", checkAuth, async (req, res) => {
   try {
     await Promise.all([
-      await User.deleteOne({ _id: req.user._id }),
-      await Preference.deleteOne({ userId: req.user._id }),
+      User.deleteOne({ _id: req.user._id }),
+      Preference.deleteOne({ userId: req.user._id }),
+      Group.updateMany(
+        {
+          groupMembers: {
+            $elemMatch: { $eq: user._id },
+          },
+        },
+        {
+          $pull: {
+            groupMembers: {
+              $elemMatch: { $eq: user._id },
+            },
+            groupAdmins: {
+              $elemMatch: { $eq: user._id },
+            },
+          },
+        }
+      ),
+      User.updateMany(
+        {
+          $or: [
+            {
+              friendList: {
+                $elemMatch: { $eq: user._id },
+              },
+            },
+            {
+              friendRequests: {
+                $elemMatch: { $eq: user._id },
+              },
+            },
+            {
+              requestsMade: {
+                $elemMatch: { $eq: user._id },
+              },
+            },
+            {
+              userBlock: {
+                $elemMatch: { $eq: user._id },
+              },
+            },
+            {
+              blockedBy: {
+                $elemMatch: { $eq: user._id },
+              },
+            },
+            {
+              friendList: {
+                $elemMatch: { $eq: user._id },
+              },
+            },
+          ],
+        },
+        {
+          $pull: {
+            friendList: {
+              $elemMatch: { $eq: user._id },
+            },
+            friendRequests: {
+              $elemMatch: { $eq: user._id },
+            },
+            requestsMade: {
+              $elemMatch: { $eq: user._id },
+            },
+            userBlock: {
+              $elemMatch: { $eq: user._id },
+            },
+            blockedBy: {
+              $elemMatch: { $eq: user._id },
+            },
+            friendList: {
+              $elemMatch: { $eq: user._id },
+            },
+          },
+        }
+      ),
+      Message.deleteMany({
+        $or: [{ senderId: user._id }, { receiverId: user._id }],
+      }),
     ]);
     return res.status(200).send();
   } catch (err) {
@@ -478,6 +572,51 @@ router.post("/users/unblock/:id", checkAuth, async (req, res) => {
       }
     );
     res.status(200).send(userRes);
+  } catch (err) {
+    res.status(500).send(err);
+  }
+});
+
+router.post("/userQuery", checkAuth, async (req, res) => {
+  let { query = "" } = req.body;
+  let { user } = req;
+
+  if (!query) {
+    res.status(200).send([]);
+    return;
+  }
+
+  try {
+    if (!ALLOWED_QUERY.test(query)) {
+      throw new Error("Not allowed characters found in query!");
+    }
+
+    if (query.length < 3) {
+      throw new Error("Not enough characters");
+    }
+
+    let filters = await User.find(
+      {
+        userName: {
+          $regex: `${query}`,
+          $options: "i",
+        },
+        _id: {
+          $nin: [user._id],
+        },
+        friendList: {
+          $nin: [user._id],
+        },
+        userBlock: {
+          $nin: [user._id],
+        },
+        blockedBy: {
+          $nin: [user._id],
+        },
+      },
+      "userName userEmail _id"
+    );
+    res.status(200).send(filters);
   } catch (err) {
     res.status(500).send(err);
   }
