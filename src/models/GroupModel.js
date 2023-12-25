@@ -7,6 +7,10 @@ const groupSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    avatar: {
+      type: Buffer,
+      required: false,
+    },
     groupMembers: {
       type: [mongoose.Schema.ObjectId],
       required: true,

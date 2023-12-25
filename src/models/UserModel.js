@@ -11,6 +11,10 @@ const userSchema = new mongoose.Schema(
       trim: true,
       unique: true,
     },
+    avatar: {
+      type: Buffer,
+      required: false,
+    },
     userEmail: {
       type: String,
       required: true,

@@ -1,9 +1,11 @@
 const express = require("express");
+const multer = require("multer");
 const { checkAuth } = require("../middleware");
 const { Group, User, Message } = require("../models");
 const { findWsUser } = require("../socket");
 
 const GroupRouter = express.Router();
+const upload = multer();
 
 GroupRouter.get("/groups/:groupId", checkAuth, async (req, res) => {
   try {
@@ -23,6 +25,41 @@ GroupRouter.get("/groups/:groupId", checkAuth, async (req, res) => {
     res.status(500).send(err);
   }
 });
+
+GroupRouter.post(
+  "/groups/:groupId/avatar",
+  checkAuth,
+  upload.single("avatar"),
+  async (req, res) => {
+    const { user, file } = req;
+    const { groupId } = req.params;
+    try {
+      let group = await Group.findById(groupId);
+      if (!group) {
+        res.status(404).send("Group not found");
+        return;
+      }
+
+      if (
+        !group?.groupMembers?.find((e) => e.toString() === user._id.toString())
+      ) {
+        throw new Error("Cannot make changes if you are not part of the group");
+      }
+
+      if (
+        !group?.groupAdmins?.find((e) => e.toString() === user._id.toString())
+      ) {
+        throw new Error("Cannot make changes if ypu are not an admin");
+      }
+
+      group.avatar = file.buffer;
+      await group.save();
+      res.status(200).send(group);
+    } catch (err) {
+      res.status(500).send(err);
+    }
+  }
+);
 
 GroupRouter.post("/groups", checkAuth, async (req, res) => {
   try {

@@ -1,9 +1,11 @@
 const { Router } = require("express");
+const multer = require("multer");
 const { checkAuth } = require("../middleware");
 const { User, Preference, Group, Message } = require("../models");
 const { findWsUser } = require("../socket");
 
 const router = Router();
+const upload = multer();
 
 const allowedChangeKeys = ["userName", "userEmail", "userPassword"];
 const ALLOWED_QUERY = /[A-Za-z0-9\s]/;
@@ -56,6 +58,22 @@ router.get("/users/profile", checkAuth, async (req, res) => {
     res.status(500).send(err);
   }
 });
+
+router.post(
+  "/users/avatar",
+  checkAuth,
+  upload.single("avatar"),
+  async (req, res) => {
+    const { user, file } = req;
+    try {
+      user.avatar = file.buffer;
+      await user.save();
+      res.status(200).send(user);
+    } catch (err) {
+      res.status(500).send(err);
+    }
+  }
+);
 
 router.post("/users/login", async (req, res) => {
   try {
@@ -614,7 +632,7 @@ router.post("/userQuery", checkAuth, async (req, res) => {
           $nin: [user._id],
         },
       },
-      "userName userEmail _id"
+      "userName userEmail _id avatar"
     );
     res.status(200).send(filters);
   } catch (err) {
