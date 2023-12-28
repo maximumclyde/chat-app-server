@@ -315,6 +315,51 @@ router.post("/users/request/:id", checkAuth, async (req, res) => {
   }
 });
 
+router.post("/users/removeRequest/:id", checkAuth, async (req, res) => {
+  try {
+    const { user } = req;
+    const requestUserId = req.params.id;
+    const requestUser = await User.findById(requestUserId);
+
+    user.requestsMade = user.requestsMade.filter(
+      (id) => id.toString() !== requestUserId
+    );
+
+    if (!requestUser) {
+      await user.save();
+      res.status(200).send(user);
+      return;
+    }
+
+    requestUser.friendRequests = requestUser.friendRequests.filter(
+      (id) => id.toString() !== user._id.toString()
+    );
+
+    const [userRes] = await Promise.all([user.save(), requestUser.save()]).then(
+      (res) => {
+        let wsClient = findWsUser(user._id.toString());
+        if (wsClient) {
+          wsClient.send(
+            JSON.stringify({
+              request: "request-removed",
+              body: {
+                _id: user._id,
+                userName: user.userName,
+              },
+            })
+          );
+        }
+
+        return res;
+      }
+    );
+
+    res.status(200).send(userRes);
+  } catch (err) {
+    res.status(500).send(err);
+  }
+});
+
 router.post("/users/accept/:id", checkAuth, async (req, res) => {
   try {
     const { user } = req;
@@ -620,6 +665,9 @@ router.post("/userQuery", checkAuth, async (req, res) => {
           $options: "i",
         },
         _id: {
+          $nin: [user._id],
+        },
+        requestsMade: {
           $nin: [user._id],
         },
         friendList: {
