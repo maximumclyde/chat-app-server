@@ -144,15 +144,42 @@ router.get("/users/:userId", checkAuth, async (req, res) => {
       throw new Error("Could not find user");
     }
 
-    delete requestUser["userEmail"];
-    delete requestUser["friendRequests"];
-    delete requestUser["requestsMade"];
-    delete requestUser["groupList"];
-    delete requestUser["userBlock"];
-    delete requestUser["blockedBy"];
-    delete requestUser["groupBlock"];
+    res.status(200).send({
+      _id: requestUser._id,
+      avatar: requestUser.avatar,
+      userName: requestUser.userName,
+    });
+  } catch (err) {
+    res.status(500).send(err);
+  }
+});
 
-    res.status(200).send(requestUser);
+router.post("/users/batchGetUsers", checkAuth, async (req, res) => {
+  const { user } = req;
+  const { idList = [] } = req.body;
+
+  try {
+    if (!idList?.length) {
+      throw new Error("Id list cannot be empty!");
+    }
+
+    let userList = await User.find({
+      _id: {
+        $in: idList,
+      },
+      blockedBy: {
+        $nin: [user._id],
+      },
+    });
+
+    res.status(200).send(
+      [userList].flat().map((u) => ({
+        _id: u._id,
+        userName: u.userName,
+        avatar: u?.avatar,
+        friendList: u.friendList,
+      }))
+    );
   } catch (err) {
     res.status(500).send(err);
   }
@@ -337,7 +364,7 @@ router.post("/users/removeRequest/:id", checkAuth, async (req, res) => {
 
     const [userRes] = await Promise.all([user.save(), requestUser.save()]).then(
       (res) => {
-        let wsClient = findWsUser(user._id.toString());
+        let wsClient = findWsUser(requestUser._id.toString());
         if (wsClient) {
           wsClient.send(
             JSON.stringify({

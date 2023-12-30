@@ -5,7 +5,7 @@ const ChatRouter = express.Router();
 const activeUsers = {};
 
 ChatRouter.ws("/chat", (ws, _, next) => {
-  ws.addEventListener("message", (msg) => {
+  ws.on("message", (msg) => {
     try {
       const { request, body } = JSON.parse(msg);
       if (!request) {
@@ -36,7 +36,6 @@ ChatRouter.ws("/chat", (ws, _, next) => {
           );
         } else if (request === "notify-activity") {
           const { userList = [] } = body;
-          ws["friendList"] = [...userList];
           for (const id of userList) {
             activeUsers?.[id]?.send(
               JSON.stringify({
@@ -44,20 +43,6 @@ ChatRouter.ws("/chat", (ws, _, next) => {
                 body: ws?.["userId"],
               })
             );
-          }
-        } else if (request === "message") {
-          const { userList = [], ...rest } = body;
-          for (const id of userList) {
-            if ((ws?.["friendList"] || [])?.includes(id)) {
-              activeUsers?.[id]?.send(
-                JSON.stringify({
-                  request: "message",
-                  body: {
-                    ...rest,
-                  },
-                })
-              );
-            }
           }
         }
       }
