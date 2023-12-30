@@ -160,7 +160,8 @@ router.post("/users/batchGetUsers", checkAuth, async (req, res) => {
 
   try {
     if (!idList?.length) {
-      throw new Error("Id list cannot be empty!");
+      res.status(200).send([]);
+      return;
     }
 
     let userList = await User.find({
@@ -172,15 +173,21 @@ router.post("/users/batchGetUsers", checkAuth, async (req, res) => {
       },
     });
 
+    if (!userList) {
+      res.status(200).send([]);
+      return;
+    }
+
     res.status(200).send(
-      [userList].flat().map((u) => ({
+      userList.map((u) => ({
         _id: u._id,
+        avatar: Buffer.from(u?.avatar || "").toString("base64"),
         userName: u.userName,
-        avatar: u?.avatar,
         friendList: u.friendList,
       }))
     );
   } catch (err) {
+    console.log("Error with batch: ", err);
     res.status(500).send(err);
   }
 });
@@ -460,15 +467,10 @@ router.post("/users/decline/:id", checkAuth, async (req, res) => {
     let requestUserId = req.params.id;
     let requestUser = await User.findById(requestUserId);
 
-    user.friendRequests = user.friendRequests.filter(
-      (id) => id.toString() !== requestUserId
-    );
-
     if (
       !requestUser ||
       !user.friendRequests.find((id) => id.toString() === requestUserId)
     ) {
-      user.save();
       throw new Error("Request user was not found");
     }
 
