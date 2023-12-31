@@ -41,15 +41,15 @@ router.get("/users/profile", checkAuth, async (req, res) => {
       Preference.findOne({ userId: user._id }),
       User.find(
         {
-          friendList: {
-            $elemMatch: { $eq: user._id },
+          _id: {
+            $in: user.friendList,
           },
         },
-        "userName userEmail friendList _id"
+        "userName userEmail friendList _id avatar"
       ),
       Group.find({
-        groupMembers: {
-          $elemMatch: { $eq: user._id },
+        _id: {
+          $in: user.groupList,
         },
       }),
     ]);
@@ -139,16 +139,15 @@ router.get("/users/:userId", checkAuth, async (req, res) => {
       throw new Error("Cannot get a user that blocked you");
     }
 
-    let requestUser = await User.findById(userId);
+    let requestUser = await User.findById(
+      userId,
+      "_id userName avatar friendList"
+    );
     if (!requestUser) {
       throw new Error("Could not find user");
     }
 
-    res.status(200).send({
-      _id: requestUser._id,
-      avatar: requestUser.avatar,
-      userName: requestUser.userName,
-    });
+    res.status(200).send(requestUser);
   } catch (err) {
     res.status(500).send(err);
   }
@@ -164,30 +163,25 @@ router.post("/users/batchGetUsers", checkAuth, async (req, res) => {
       return;
     }
 
-    let userList = await User.find({
-      _id: {
-        $in: idList,
+    let userList = await User.find(
+      {
+        _id: {
+          $in: idList,
+        },
+        blockedBy: {
+          $nin: [user._id],
+        },
       },
-      blockedBy: {
-        $nin: [user._id],
-      },
-    });
+      "_id avatar userName friendList"
+    );
 
     if (!userList) {
       res.status(200).send([]);
       return;
     }
 
-    res.status(200).send(
-      userList.map((u) => ({
-        _id: u._id,
-        avatar: Buffer.from(u?.avatar || "").toString("base64"),
-        userName: u.userName,
-        friendList: u.friendList,
-      }))
-    );
+    res.status(200).send(userList);
   } catch (err) {
-    console.log("Error with batch: ", err);
     res.status(500).send(err);
   }
 });
