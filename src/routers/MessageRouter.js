@@ -79,11 +79,7 @@ MessageRouter.post("/message/:userId", checkAuth, async (req, res) => {
       socketClient.send(
         JSON.stringify({
           request: "message-received",
-          body: {
-            content,
-            senderId: user._id,
-            createdAt: message.createdAt,
-          },
+          body: message,
         })
       );
     }
@@ -125,12 +121,7 @@ MessageRouter.post("/message/group/:groupId", checkAuth, async (req, res) => {
           ws.send(
             JSON.stringify({
               request: "group-message",
-              body: {
-                content,
-                senderId: message.senderId,
-                groupId: message.groupId,
-                createdAt: message.createdAt,
-              },
+              body: message,
             })
           );
         }
