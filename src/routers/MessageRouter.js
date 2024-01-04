@@ -9,6 +9,7 @@ MessageRouter.get("/message/:userId", checkAuth, async (req, res) => {
   try {
     let { user } = req;
     let friendId = req.params.userId;
+    let { messagesExchanged } = req.query;
 
     if (!user.friendList.find((id) => id.toString() === friendId)) {
       throw new Error("Cannot get messages between users that are not friends");
@@ -21,7 +22,10 @@ MessageRouter.get("/message/:userId", checkAuth, async (req, res) => {
           $or: [{ receiverId: user._id.toString() }, { receiverId: friendId }],
         },
       ],
-    });
+    })
+      .sort({ createdAt: -1 })
+      .skip(+messagesExchanged)
+      .limit(30);
     res.status(200).send(messages);
   } catch (err) {
     res.status(500).send(err);
@@ -32,6 +36,8 @@ MessageRouter.get("/message/group/:id", checkAuth, async (req, res) => {
   try {
     let { user } = req;
     let groupId = req.params.id;
+    let { messagesExchanged } = req.query;
+
     if (!user.groupList.find((id) => id.toString() === groupId)) {
       throw new Error("Cannot get messages to a group you are not part of");
     }
@@ -41,7 +47,11 @@ MessageRouter.get("/message/group/:id", checkAuth, async (req, res) => {
       throw new Error("Group was not found");
     }
 
-    let messages = await Message.find({ groupId });
+    let messages = await Message.find({ groupId })
+      .sort({ createdAt: -1 })
+      .skip(+messagesExchanged)
+      .limit(30);
+
     res.status(200).send(messages);
   } catch (err) {
     res.status(500).send(err);
