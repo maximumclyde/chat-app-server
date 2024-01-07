@@ -690,12 +690,6 @@ router.post("/userQuery", checkAuth, async (req, res) => {
         _id: {
           $nin: [user._id],
         },
-        requestsMade: {
-          $nin: [user._id],
-        },
-        friendList: {
-          $nin: [user._id],
-        },
         userBlock: {
           $nin: [user._id],
         },
