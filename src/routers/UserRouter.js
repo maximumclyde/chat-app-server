@@ -1,5 +1,6 @@
 const { Router } = require("express");
 const multer = require("multer");
+const mongoose = require("mongoose");
 const { checkAuth } = require("../middleware");
 const { User, Preference, Group, Message } = require("../models");
 const { findWsUser } = require("../socket");
@@ -512,12 +513,14 @@ router.post("/users/unfriend/:id", checkAuth, async (req, res) => {
     const relatedUserId = req.params.id;
     let relatedUser = await User.findById(relatedUserId);
 
+    user.friendList = user.friendList.filter(
+      (id) => id.toString() !== relatedUserId
+    );
+
     if (!relatedUser) {
-      user.friendList = user.friendList.filter(
-        (id) => id.toString() !== relatedUserId
-      );
       user.save();
-      throw new Error("Friend was not found");
+      res.status(200).send(user);
+      return;
     }
 
     if (
@@ -527,35 +530,44 @@ router.post("/users/unfriend/:id", checkAuth, async (req, res) => {
       throw new Error("No operations allowed with blocked users");
     }
 
-    if (!user.friendList.find((id) => id.toString() === relatedUserId)) {
-      throw new Error("Can not unfriend a user who is not your friend");
-    }
-
-    user.friendList = user.friendList.filter(
-      (id) => id.toString() !== relatedUserId
-    );
     relatedUser.friendList = relatedUser.friendList.filter(
       (id) => id.toString() !== user._id.toString()
     );
 
-    const [userRes] = await Promise.all([user.save(), relatedUser.save()]).then(
-      (res) => {
-        let wsClient = findWsUser(relatedUserId);
-        if (wsClient) {
-          wsClient.send(
-            JSON.stringify({
-              request: "unfriended",
-              body: {
-                _id: user._id,
-                userName: user.userName,
+    const [userRes] = await Promise.all([
+      user.save(),
+      relatedUser.save(),
+      Message.deleteMany({
+        $and: [
+          {
+            $or: [
+              {
+                $and: [{ senderId: relatedUser._id }, { receiverId: user._id }],
               },
-            })
-          );
-        }
-
-        return res;
+              {
+                $and: [{ senderId: user._id }, { receiverId: relatedUser._id }],
+              },
+            ],
+          },
+          { groupId: undefined },
+        ],
+      }),
+    ]).then((res) => {
+      let wsClient = findWsUser(relatedUserId);
+      if (wsClient) {
+        wsClient.send(
+          JSON.stringify({
+            request: "unfriended",
+            body: {
+              _id: user._id,
+              userName: user.userName,
+            },
+          })
+        );
       }
-    );
+
+      return res;
+    });
 
     res.status(200).send(userRes);
   } catch (err) {
@@ -688,6 +700,12 @@ router.post("/userQuery", checkAuth, async (req, res) => {
           $options: "i",
         },
         _id: {
+          $nin: [user._id],
+        },
+        requestsMade: {
+          $nin: [user._id],
+        },
+        friendRequests: {
           $nin: [user._id],
         },
         userBlock: {

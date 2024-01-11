@@ -49,7 +49,7 @@ GroupRouter.post(
       if (
         !group?.groupAdmins?.find((e) => e.toString() === user._id.toString())
       ) {
-        throw new Error("Cannot make changes if ypu are not an admin");
+        throw new Error("Cannot make changes if you are not an admin");
       }
 
       group.avatar = file.buffer;
