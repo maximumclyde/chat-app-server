@@ -593,13 +593,13 @@ router.post("/users/block/:id", checkAuth, async (req, res) => {
     }
 
     blockUser.friendList = blockUser.friendList.filter(
-      (id) => id.toString() !== blockId
+      (id) => id.toString() !== user._id.toString()
     );
     blockUser.friendRequests = blockUser.friendRequests.filter(
-      (id) => id.toString() !== blockId
+      (id) => id.toString() !== user._id.toString()
     );
     blockUser.requestsMade = blockUser.requestsMade.filter(
-      (id) => id.toString() !== blockId
+      (id) => id.toString() !== user._id.toString()
     );
 
     user.friendList = user.friendList.filter((id) => id.toString() !== blockId);
@@ -612,24 +612,40 @@ router.post("/users/block/:id", checkAuth, async (req, res) => {
     user.userBlock = [...user.userBlock, blockId];
     blockUser.blockedBy = [...blockUser.blockedBy, user._id];
 
-    const [userRes] = await Promise.all([user.save(), blockUser.save()]).then(
-      (res) => {
-        let wsClient = findWsUser(blockId);
-        if (wsClient) {
-          wsClient.send(
-            JSON.stringify({
-              request: "blocked",
-              body: {
-                _id: user._id,
-                userName: user.userName,
+    const [userRes] = await Promise.all([
+      user.save(),
+      blockUser.save(),
+      Message.deleteMany({
+        $and: [
+          {
+            $or: [
+              {
+                $and: [{ senderId: blockUser._id }, { receiverId: user._id }],
               },
-            })
-          );
-        }
-
-        return res;
+              {
+                $and: [{ senderId: user._id }, { receiverId: blockUser._id }],
+              },
+            ],
+          },
+          { groupId: undefined },
+        ],
+      }),
+    ]).then((res) => {
+      let wsClient = findWsUser(blockId);
+      if (wsClient) {
+        wsClient.send(
+          JSON.stringify({
+            request: "blocked",
+            body: {
+              _id: user._id,
+              userName: user.userName,
+            },
+          })
+        );
       }
-    );
+
+      return res;
+    });
 
     return res.status(200).send(userRes);
   } catch (err) {
