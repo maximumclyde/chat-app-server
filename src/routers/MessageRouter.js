@@ -125,8 +125,8 @@ MessageRouter.post("/message/group/:groupId", checkAuth, async (req, res) => {
     message = await message.save();
 
     for (const memberId of group.groupMembers) {
-      if (memberId !== user._id) {
-        let ws = findWsUser(memberId);
+      if (memberId.toString() !== user._id.toString()) {
+        let ws = findWsUser(memberId.toString());
         if (ws) {
           ws.send(
             JSON.stringify({

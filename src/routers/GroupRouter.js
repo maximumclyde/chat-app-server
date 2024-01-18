@@ -1,5 +1,6 @@
 const express = require("express");
 const multer = require("multer");
+const mongoose = require("mongoose");
 const { checkAuth } = require("../middleware");
 const { Group, User, Message } = require("../models");
 const { findWsUser } = require("../socket");
@@ -64,17 +65,33 @@ GroupRouter.post(
 GroupRouter.post("/groups", checkAuth, async (req, res) => {
   try {
     let { user } = req;
-    const { groupName } = req.body;
+    const { groupName, groupMembers = [] } = req.body;
+
+    const membersIdList = [
+      user._id,
+      ...groupMembers.map((id) => new mongoose.Types.ObjectId(id)),
+    ];
+
     let group = new Group({
       groupName,
-      groupMembers: [user._id],
+      groupMembers: membersIdList,
       groupAdmins: [user._id],
       createdBy: {
         name: user.userName,
         id: user._id,
       },
     });
+
     group = await group.save();
+
+    await User.updateMany(
+      { _id: { $in: membersIdList } },
+      {
+        $push: {
+          groupList: group._id,
+        },
+      }
+    );
 
     res.status(200).send(group);
   } catch (err) {
