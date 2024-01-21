@@ -15,8 +15,8 @@ router.post("/users", async (req, res) => {
   try {
     let user = await new User(req.body).save();
     const [token, userPreferences] = await Promise.all([
-      await user.generateToken(),
-      await new Preference({
+      user.generateToken(),
+      new Preference({
         userId: user._id,
         preferences: {
           theme: "dark",
@@ -85,8 +85,8 @@ router.post("/users/login", async (req, res) => {
     }
 
     const [token, userPreferences] = await Promise.all([
-      await user.generateToken(),
-      await Preference.findOne({ userId: user._id }),
+      user.generateToken(),
+      Preference.findOne({ userId: user._id }),
     ]);
 
     res.status(200).send({ user, token, userPreferences });
@@ -319,8 +319,8 @@ router.post("/users/request/:id", checkAuth, async (req, res) => {
     userToRequest.friendRequests = [...userToRequest.friendRequests, user._id];
 
     const [userRes] = await Promise.all([
-      await user.save(),
-      await userToRequest.save(),
+      user.save(),
+      userToRequest.save(),
     ]).then((res) => {
       let wsClient = findWsUser(userId);
       if (wsClient) {
