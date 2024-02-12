@@ -14,7 +14,7 @@ describe("Preference test suite", () => {
 
   test("Should update user preference", async () => {
     await request(app)
-      .patch("/userPreferences")
+      .post("/userPreferences")
       .set("Authorization", `Bearer ${userOne.tokens[0].token}`)
       .set("Content-Type", "application/json")
       .send({
@@ -25,7 +25,7 @@ describe("Preference test suite", () => {
 
   test("Should delete the test key from the preference", async () => {
     await request(app)
-      .patch("/userPreferences/removePreference")
+      .post("/userPreferences/removePreference")
       .set("Authorization", `Bearer ${userOne.tokens[0].token}`)
       .set("Content-Type", "application/json")
       .send(["test"])

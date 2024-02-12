@@ -12,13 +12,18 @@ GroupRouter.get("/groups/:groupId", checkAuth, async (req, res) => {
   try {
     let { user } = req;
     let groupId = req.params.groupId;
-    if (!user.groupList.find((id) => id.toString() === groupId)) {
-      throw new Error("Cannot get info on a group you are not a part of");
+    let group = await Group.findById(groupId);
+
+    if (!group) {
+      res.status(404).send("Could not find group");
+      return;
     }
 
-    let group = await Group.findById(groupId);
-    if (!group) {
-      throw new Error("Could not find group");
+    if (
+      !group.groupMembers.find((id) => id.toString() === user._id.toString())
+    ) {
+      res.status(403).send("Cannot get info on a group you are not a part of");
+      return;
     }
 
     res.status(200).send(group);
@@ -44,17 +49,46 @@ GroupRouter.post(
       if (
         !group?.groupMembers?.find((e) => e.toString() === user._id.toString())
       ) {
-        throw new Error("Cannot make changes if you are not part of the group");
+        res
+          .status(403)
+          .send("Cannot make changes if you are not part of the group");
+        return;
       }
 
       if (
         !group?.groupAdmins?.find((e) => e.toString() === user._id.toString())
       ) {
-        throw new Error("Cannot make changes if you are not an admin");
+        res.status(403).send("Cannot make changes if you are not an admin");
+        return;
       }
 
       group.avatar = file.buffer;
       await group.save();
+
+      const userId = user._id.toString();
+      for (const member of group.groupMembers) {
+        const id = member.toString();
+
+        if (id === userId) {
+          continue;
+        }
+
+        const wsClient = findWsUser(id);
+        if (wsClient) {
+          wsClient.send(
+            JSON.stringify({
+              request: "group-avatar-change",
+              body: {
+                groupId,
+                avatar: group.avatar,
+                userId: user._id.toString(),
+                userName: user.userName,
+              },
+            })
+          );
+        }
+      }
+
       res.status(200).send(group);
     } catch (err) {
       res.status(500).send(err);
@@ -91,7 +125,31 @@ GroupRouter.post("/groups", checkAuth, async (req, res) => {
           groupList: group._id,
         },
       }
-    );
+    ).then(() => {
+      const userId = user._id.toString();
+
+      for (const member of membersIdList) {
+        const id = member.toString();
+        if (id === userId) {
+          continue;
+        }
+
+        const wsClient = findWsUser(id);
+        if (wsClient) {
+          wsClient.send(
+            JSON.stringify({
+              request: "group-create",
+              body: {
+                groupId: group._id.toString(),
+                userId: user._id.toString(),
+                userName: user.userName,
+                groupName: group.groupName,
+              },
+            })
+          );
+        }
+      }
+    });
 
     res.status(200).send(group);
   } catch (err) {
@@ -99,63 +157,69 @@ GroupRouter.post("/groups", checkAuth, async (req, res) => {
   }
 });
 
-GroupRouter.delete("/groups/:id", checkAuth, async (req, res) => {
+GroupRouter.delete("/groups/:groupId", checkAuth, async (req, res) => {
+  const { user } = req;
+  const { groupId } = req.params;
+
   try {
-    let { user } = req;
-    const groupId = req.params.id;
-    let group = await Group.findById(groupId);
+    const group = await Group.findById(groupId);
     if (!group) {
-      throw new Error("Could not find group");
+      res.status(404).send("The group was not found");
+      return;
     }
 
     if (
       !group.groupAdmins.find((id) => id.toString() === user._id.toString())
     ) {
-      throw new Error("Cannot operate if user is not admin");
+      res.status(403).send("Cannot operate if user is not admin");
+      return;
     }
 
     await Promise.all([
-      User.find({
-        groupList: { $elemMatch: { $eq: groupId } },
-      }),
-      Message.deleteMany({ groupId }),
-      Group.deleteOne({ _id: groupId }),
-    ]).then(async (result) => {
-      let members = result?.[0];
-      if (Array.isArray(members)) {
-        for (let i = 0; i < members.length; i++) {
-          members[i]["groupList"] = members[i]["groupList"].filter(
-            (id) => id.toString() !== groupId
+      User.updateMany(
+        {
+          $or: [
+            { groupList: { $elemMatch: { $eq: group._id } } },
+            { groupBlock: { $elemMatch: { $eq: group._id } } },
+          ],
+        },
+        {
+          $pull: {
+            groupList: {
+              $elemMatch: { $eq: group._id },
+            },
+            groupBlock: {
+              $elemMatch: { $eq: group._id },
+            },
+          },
+        }
+      ),
+      Message.deleteMany({ groupId: group._id }),
+      Group.deleteOne({ _id: group._id }),
+    ]).then(() => {
+      const userId = user._id.toString();
+
+      for (const member of group.groupMembers) {
+        const memberId = member.toString();
+        const wsClient = findWsUser(memberId);
+
+        if (wsClient) {
+          wsClient.send(
+            JSON.stringify({
+              request: "group-delete",
+              body: {
+                groupId: group._id.toString(),
+                groupName: group.groupName,
+                userId,
+                userName: user.userName,
+              },
+            })
           );
         }
-        await Promise.allSettled(
-          members.map(async (member) => await member.save())
-        ).then((membersRes) => {
-          for (const memRes of membersRes) {
-            if (memRes.status === "fulfilled") {
-              let memberId = memRes.value._id.toString();
-              let wsClient = findWsUser(memberId);
-              if (wsClient) {
-                wsClient.send(
-                  JSON.stringify({
-                    request: "group-delete",
-                    body: {
-                      groupId,
-                      userName: user.userName,
-                      id: user._id,
-                    },
-                  })
-                );
-              }
-            }
-          }
-
-          res.status(200).send();
-        });
-      } else {
-        throw new Error("Could not get group members");
       }
     });
+
+    res.status(200).send();
   } catch (err) {
     res.status(500).send(err);
   }
@@ -168,33 +232,41 @@ GroupRouter.post(
     try {
       let { user } = req;
       const groupId = req.params.groupId;
-      const userId = req.params.id;
+      const userIdToAdd = req.params.id;
+      const userId = user._id.toString();
+
       let group = await Group.findById(groupId);
       if (!group) {
-        throw new Error("Could not find group");
+        res.status(404).send("Could not find group");
+        return;
       }
 
-      if (
-        !group.groupAdmins.find((id) => id.toString() === user._id.toString())
-      ) {
-        throw new Error("Cannot operate if user is not admin");
+      if (!group.groupAdmins.find((id) => id.toString() === userId)) {
+        res.status(403).send("Cannot operate if user is not admin");
+        return;
       }
 
-      if (group.groupMembers.find((id) => id.toString() === userId)) {
-        throw new Error("Cannot add the same member twice");
+      if (group.groupMembers.find((id) => id.toString() === userIdToAdd)) {
+        res.status(403).send("Cannot add the same member twice");
+        return;
       }
 
-      if (!user.friendList.find((id) => id.toString() === userId)) {
-        throw new Error("Cannot add a user that's not in your friend list");
+      if (!user.friendList.find((id) => id.toString() === userIdToAdd)) {
+        res
+          .status(403)
+          .send("Cannot add a user that's not in your friend list");
+        return;
       }
 
-      let requestUser = await User.findById(userId);
+      let requestUser = await User.findById(userIdToAdd);
       if (!requestUser) {
-        throw new Error("Could not find user");
+        res.status(404).send("Could not find user");
+        return;
       }
 
       if (requestUser.groupBlock.find((id) => id.toString() === groupId)) {
-        throw new Error("User has blocked the group");
+        res.status(401).send("User has blocked the group");
+        return;
       }
 
       group.groupMembers = [...group.groupMembers, requestUser._id];
@@ -203,23 +275,41 @@ GroupRouter.post(
       let [groupRes] = await Promise.all([
         group.save(),
         requestUser.save(),
-      ]).then((res) => {
-        let ws = findWsUser(userId);
-        if (ws) {
-          ws.send(
+      ]).then((result) => {
+        const userToAddClient = findWsUser(userIdToAdd);
+        if (userToAddClient) {
+          userToAddClient.send(
             JSON.stringify({
-              request: "group-add",
+              request: "added-to-group",
               body: {
-                groupId: group._id,
-                groupName: group.groupName,
-                addedById: user._id,
-                addedByName: user.userName,
+                groupId,
+                userId: user._id.toString(),
+                userName: user.userName,
               },
             })
           );
         }
 
-        return res;
+        for (const member of group.groupMembers) {
+          const memberId = member.toString();
+
+          const wsClient = findWsUser(memberId);
+          if (wsClient) {
+            wsClient.send(
+              JSON.stringify({
+                request: "group-add",
+                body: {
+                  groupId,
+                  userId,
+                  userName: user.userName,
+                  addedUser: userIdToAdd,
+                },
+              })
+            );
+          }
+        }
+
+        return result;
       });
 
       res.status(200).send(groupRes);
@@ -249,17 +339,27 @@ GroupRouter.post(
         if (
           !group.groupAdmins.find((id) => id.toString() === user._id.toString())
         ) {
-          throw new Error("Can not operate if user is not admin");
+          res.status(401).send("Can not operate if user is not admin");
+          return;
         }
 
         requestUser = await User.findById(userId);
         if (!requestUser) {
-          throw new Error("Could not find user");
+          res.status(404).send("Could not find user");
+          return;
+        }
+
+        if (group.createdBy.id.toString() === userId) {
+          res.status(403).send("Can not remove the creator of the group");
+          return;
         }
       }
 
       if (!group.groupMembers.find((id) => id.toString() === userId)) {
-        throw new Error("Can not remove user that is not part of the group");
+        res
+          .status(401)
+          .send("Can not remove user that is not part of the group");
+        return;
       }
 
       group.groupMembers = group.groupMembers.filter(
@@ -292,13 +392,37 @@ GroupRouter.post(
           if (wsClient) {
             wsClient.send(
               JSON.stringify({
-                request: "group-remove",
-                groupId,
-                groupName: group.groupName,
-                userId: user._id,
-                userName: user.name,
+                request: "removed-from-group",
+                body: {
+                  groupId,
+                  groupName: group.groupName,
+                  userId: user._id,
+                  userName: user.name,
+                },
               })
             );
+          }
+
+          for (const member of group.groupMembers) {
+            const memberId = member.toString();
+            const wsClient = findWsUser(memberId);
+            if (wsClient) {
+              wsClient.send(
+                JSON.stringify({
+                  request: "group-remove",
+                  body: {
+                    groupId,
+                    groupName: group.groupName,
+                    userId: user._id,
+                    userName: user.userName,
+                    removedUser: userId,
+                    isAdmin: group.groupAdmins.find(
+                      (id) => id.toString() === memberId
+                    ),
+                  },
+                })
+              );
+            }
           }
 
           return res;
@@ -322,27 +446,57 @@ GroupRouter.post(
       let userId = req.params.id;
       let group = await Group.findById(groupId);
       if (!group) {
-        throw new Error("Could not find group");
+        res.status(404).send("Group not found!");
+        return;
       }
 
       if (
         !group.groupAdmins.find((id) => id.toString() === user._id.toString())
       ) {
-        throw new Error("Cannot operate if user is not admin");
+        res.status(401).send("Cannot operate if user is not admin");
+        return;
       }
 
       if (!group.groupMembers.find((id) => id.toString() === userId)) {
-        throw new Error("Cannot admin a user that is not part of the group");
+        res
+          .status(403)
+          .send("Cannot admin a user that is not part of the group");
+        return;
       }
 
       if (group.groupAdmins.find((id) => id.toString() === userId)) {
-        throw new Error("Cannot admin an admin");
+        res.status(401).send("Cannot admin an admin");
+        return;
+      }
+
+      if (user._id.toString() === userId) {
+        res.status(401).send("Can not admin yourself");
+        return;
       }
 
       let memberId = group.groupMembers.find((id) => id.toString() === userId);
 
       group.groupAdmins = [...group.groupAdmins, memberId];
       group = await group.save();
+
+      for (const member of group.groupMembers) {
+        const memberId = member.toString();
+        const wsClient = findWsUser(memberId);
+        if (wsClient) {
+          wsClient.send(
+            JSON.stringify({
+              request: "added-admin",
+              body: {
+                groupId: group._id.toString(),
+                groupName: group.groupName,
+                userId: user._id,
+                userName: user.userName,
+                newAdmin: userId,
+              },
+            })
+          );
+        }
+      }
 
       res.status(200).send(group);
     } catch (err) {
@@ -361,23 +515,47 @@ GroupRouter.post(
       const userId = req.params.id;
       let group = await Group.findById(groupId);
       if (!group) {
-        throw new Error("Could not find group");
+        res.status(404).send("Group not found!");
+        return;
       }
 
       if (
         !group.groupAdmins.find((id) => id.toString() === user._id.toString())
       ) {
-        throw new Error("Cannot operate if user is not admin");
+        res.status(401).send("Cannot operate if user is not admin");
+        return;
       }
 
       if (!group.groupAdmins.find((id) => id.toString() === userId)) {
-        throw new Error("Cannot remove a user that is not part of the admins");
+        res.status(403).send("Cannot demote a user that is not an admin");
+        return;
       }
 
       group.groupAdmins = group.groupAdmins.filter(
         (id) => id.toString() !== userId
       );
       group = await group.save();
+
+      for (const member of group.groupMembers) {
+        const memberId = member.toString();
+
+        const wsClient = findWsUser(memberId);
+        if (!wsClient) {
+          continue;
+        }
+
+        wsClient.send(
+          JSON.stringify({
+            request: "removed-admin",
+            body: {
+              removedAdmin: userId,
+              userName: user.userName,
+              groupId: group._id,
+              groupName: group.groupName,
+            },
+          })
+        );
+      }
 
       res.status(200).send(group);
     } catch (err) {

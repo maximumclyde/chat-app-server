@@ -37,14 +37,14 @@ describe("Group test suite", () => {
     await request(app)
       .post(`/groups/${newTestGroupId}/addUser/${userOneId}`)
       .set("Authorization", `Bearer ${userTwo.tokens[0].token}`)
-      .expect(500);
+      .expect(403);
   });
 
   test("User 1 should not be able to add user 2", async () => {
     await request(app)
       .post(`/groups/${newTestGroupId}/addUser/${userTwoId}`)
       .set("Authorization", `Bearer ${userOne.tokens[0].token}`)
-      .expect(500);
+      .expect(403);
   });
 
   test("User 1 should send a request to user 2", async () => {
@@ -74,7 +74,7 @@ describe("Group test suite", () => {
     await request(app)
       .post(`/groups/${newTestGroupId}/removeUser/${userTwoId}`)
       .set("Authorization", `Bearer ${userOne.tokens[0].token}`)
-      .expect(500);
+      .expect(401);
   });
 
   test("User 2 should make user 1 an admin", async () => {
@@ -84,11 +84,11 @@ describe("Group test suite", () => {
       .expect(200);
   });
 
-  test("User 1 should be able to remove user 2", async () => {
+  test("User 1 should not be able to remove user 2", async () => {
     await request(app)
       .post(`/groups/${newTestGroupId}/removeUser/${userTwoId}`)
       .set("Authorization", `Bearer ${userOne.tokens[0].token}`)
-      .expect(200);
+      .expect(403);
   });
 
   test("User 1 should be able to leave the group", async () => {
@@ -102,7 +102,7 @@ describe("Group test suite", () => {
     await request(app)
       .get(`/groups/${newTestGroupId}`)
       .set("Authorization", `Bearer ${userOne.tokens[0].token}`)
-      .expect(500);
+      .expect(403);
   });
 
   test("User 1 should send a message to the group", async () => {

@@ -1,6 +1,5 @@
 const { Router } = require("express");
 const multer = require("multer");
-const mongoose = require("mongoose");
 const { checkAuth } = require("../middleware");
 const { User, Preference, Group, Message } = require("../models");
 const { findWsUser } = require("../socket");
@@ -188,10 +187,12 @@ router.post("/users/batchGetUsers", checkAuth, async (req, res) => {
 });
 
 router.delete("/users/profile", checkAuth, async (req, res) => {
+  const { user } = req;
+
   try {
     await Promise.all([
-      User.deleteOne({ _id: req.user._id }),
-      Preference.deleteOne({ userId: req.user._id }),
+      User.deleteOne({ _id: user._id }),
+      Preference.deleteOne({ userId: user._id }),
       Group.updateMany(
         {
           groupMembers: {

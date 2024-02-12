@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { Message } = require("../models");
 
 const groupSchema = new mongoose.Schema(
   {
@@ -36,20 +37,25 @@ const groupSchema = new mongoose.Schema(
   }
 );
 
-groupSchema.post("updateMany", async function (next) {
+groupSchema.post("updateMany", async function () {
   try {
     let group = this;
     if (group.groupMembers.length) {
       if (!group.groupAdmins.length) {
         group.groupAdmins = [group.groupMembers[0]];
-        await group.save();
+        await group.save().catch((err) => {
+          console.log("Error updating group: ", err);
+        });
       }
     } else {
-      await Group.deleteOne({ _id: group._id });
+      await Promise.allSettled([
+        Group.deleteOne({ _id: group._id }),
+        Message.deleteMany({ groupId: group._id }),
+      ]).catch((err) => {
+        console.log("Error deleting group resources: ", err);
+      });
     }
   } catch {}
-
-  next();
 });
 
 const Group = mongoose.model("Group", groupSchema);
