@@ -9,7 +9,7 @@
     "test": "jest --watchAll --runInBand --silent=false"
   },
   "devDependencies": {
-    "vite": "^4.4.5"
+    "vite": "^5.1.1"
   },
   "jest": {
     "testEnvironment": "node"
